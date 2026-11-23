@@ -1,0 +1,11 @@
+.DS_Store
+.cache/
+private/
+output/
+__pycache__/
+*.mpq
+*.MPQ
+*.iso
+*.exe
+*.zip
+*.data

@@ -1,0 +1,24 @@
+<!doctype html>
+<html lang="ru">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+  <meta name="theme-color" content="#000000">
+  <link rel="icon" href="data:,">
+  <title>StarCraft · Brood War</title>
+  <style>
+    html, body { width: 100%; height: 100%; margin: 0; overflow: hidden; background: black; color-scheme: dark; }
+    body { display: grid; place-items: center; }
+    input { max-width: 90vw; }
+    canvas { display: block; outline: none; touch-action: none; }
+    [hidden] { display: none !important; }
+  </style>
+</head>
+<body>
+  <input id="library" type="file" multiple accept=".mpq" hidden
+    title="Выберите папку repack, подготовленную из ваших дисков StarCraft и Brood War"
+    aria-label="Выбрать локальные архивы StarCraft и Brood War">
+  <canvas id="canvas" tabindex="-1" hidden aria-label="StarCraft"></canvas>
+  <script type="module" src="./launch.js"></script>
+</body>
+</html>

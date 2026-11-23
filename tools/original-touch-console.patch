@@ -1,0 +1,17 @@
+diff --git a/native/kp_app/sdl/kp_app_input.c b/native/kp_app/sdl/kp_app_input.c
+index 591cfb4..f1fcd33 100644
+--- a/native/kp_app/sdl/kp_app_input.c
++++ b/native/kp_app/sdl/kp_app_input.c
+@@ -363,7 +363,12 @@ void kp_input_frame(KpApp *a)
+ 	if (display <= 0) display = 1;
+ 	px_per_dp = a->flow.scale > 0 ? display / a->flow.scale : display;
+ 	kp_touch_set_density(&a->touch, px_per_dp);
++#ifdef __EMSCRIPTEN__
++	/* Use the original console on mobile web. Finger commands and camera gestures are handled separately. */
++	if (a->flow.hud_on) kp_hud_pad(&a->flow.hud, 0, px_per_dp);
++#else
+ 	if (a->flow.hud_on) kp_hud_pad(&a->flow.hud, a->touch_mode, px_per_dp); /* the touch pad in the touch mode's games */
++#endif
+ 	screen_key(a, key);
+ 	if (kp_touch_active(&a->touch) && memcmp(key, a->touch_screen, sizeof key) != 0) kp_touch_cancel(&a->touch);
+ 	kp_touch_frame(&a->touch, clock_ms(a));
