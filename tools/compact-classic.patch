@@ -28,28 +28,106 @@ index f86ef6b..670fa28 100644
  		cmd_repack },
  	{ "locale-check", "locale-check DIR [--locale L|all] [--out DIR]", cmd_locale_check },
  	{ "scenarios", "scenarios DIR [--specs DIR] [--out DIR]", cmd_scenarios },
+diff --git a/native/kp_convert/kp_movie.c b/native/kp_convert/kp_movie.c
+index 36aff56..e64a540 100644
+--- a/native/kp_convert/kp_movie.c
++++ b/native/kp_convert/kp_movie.c
+@@ -57,7 +57,7 @@ static int take_packets(vpx_codec_ctx_t *enc, KpMovieVideo *out, size_t *cap, ui
+ 	return got;
+ }
+ 
+-int kp_movie_vp9(uint32_t width, uint32_t height, uint32_t rate_num, uint32_t rate_den, uint32_t frames, KpMovieFrame frame,
++static int movie_vp9(int quality, uint32_t width, uint32_t height, uint32_t rate_num, uint32_t rate_den, uint32_t frames, KpMovieFrame frame,
+ 	void *ctx, KpMovieVideo *out, char *err, size_t err_size)
+ {
+ 	vpx_codec_ctx_t enc;
+@@ -89,7 +89,7 @@ int kp_movie_vp9(uint32_t width, uint32_t height, uint32_t rate_num, uint32_t ra
+ 		return fail(err, err_size, "the VP9 encoder does not start: %s", vpx_codec_error(&enc));
+ 	}
+ 	vpx_codec_control(&enc, VP8E_SET_CPUUSED, KP_MOVIE_CPU_USED);
+-	vpx_codec_control(&enc, VP8E_SET_CQ_LEVEL, KP_MOVIE_CQ);
++	vpx_codec_control(&enc, VP8E_SET_CQ_LEVEL, quality);
+ 	vpx_codec_control(&enc, VP8E_SET_STATIC_THRESHOLD, 0);
+ 	vpx_codec_control(&enc, VP9E_SET_COLOR_SPACE, VPX_CS_SRGB);
+ 	vpx_codec_control(&enc, VP9E_SET_COLOR_RANGE, VPX_CR_STUDIO_RANGE);
+@@ -133,6 +133,24 @@ done:
+ 	return rc;
+ }
+ 
++int kp_movie_vp9(uint32_t width, uint32_t height, uint32_t rate_num, uint32_t rate_den, uint32_t frames, KpMovieFrame frame,
++	void *ctx, KpMovieVideo *out, char *err, size_t err_size)
++{
++	return movie_vp9(KP_MOVIE_CQ, width, height, rate_num, rate_den, frames, frame, ctx, out, err, err_size);
++}
++
++int kp_movie_quality(const char *name)
++{
++	/* Keep the lettering of the short title cards and the fine detail in
++	 * the dark hall, star field and backlit smoke of these three movies. */
++	if (strncmp(name, "smk\\pre", 7) == 0) return 24;
++	if (strcmp(name, "smk\\terran1") == 0) return 26;
++	if (strcmp(name, "smk\\xzerg") == 0) return 28;
++	if (strcmp(name, "smk\\zerg1") == 0) return 30;
++	if (strcmp(name, "smk\\starintr") == 0) return 32;
++	return 37;
++}
++
+ /* --- a Smacker movie --- */
+ 
+ typedef struct {
+@@ -272,7 +290,7 @@ uint8_t *kp_movie_smk_webm(const uint8_t *smk, size_t size, const char *name, si
+ 		}
+ 		has_sound = 1;
+ 	}
+-	if (kp_movie_vp9(clip->width, clip->height, clip->rate_num, clip->rate_den, clip->frames, smk_frame, &frames, &video, why,
++	if (movie_vp9(kp_movie_quality(name), clip->width, clip->height, clip->rate_num, clip->rate_den, clip->frames, smk_frame, &frames, &video, why,
+ 			sizeof why) != 0) {
+ 		snprintf(err, err_size, "%s: %s%s%s", name, why, frames.e.msg[0] ? ": " : "", frames.e.msg);
+ 		goto done;
 diff --git a/native/kp_convert/kp_movie.h b/native/kp_convert/kp_movie.h
-index 7c77b28..d082318 100644
+index 7c77b28..45aeb63 100644
 --- a/native/kp_convert/kp_movie.h
 +++ b/native/kp_convert/kp_movie.h
-@@ -19,11 +19,11 @@
+@@ -19,11 +19,14 @@
  extern "C" {
  #endif
  
 -#define KP_MOVIE_CQ 32           /* FFmpeg's -crf 32 -b:v 0 */
-+#define KP_MOVIE_CQ 37           /* compact mobile SD pack, same frame size, rate and chroma */
++#define KP_MOVIE_CQ 32           /* reference encoder for standalone callers */
  #define KP_MOVIE_CPU_USED 2
  #define KP_MOVIE_KEY_INTERVAL 128 /* libvpx's own longest distance between key frames, named so that it stays */
  /* What a movie's WebM is kept in the cache by, past its SMK's SHA-256: the settings and the writer's version */
 -#define KP_MOVIE_SETTINGS "vp9-q32-c2-k128-vorbis-q3-webm2" /* webm2: a sound block's time its first sample's */
-+#define KP_MOVIE_SETTINGS "vp9-q37-c2-k128-vorbis-q3-webm2" /* webm2: a sound block's time its first sample's */
++#define KP_MOVIE_SETTINGS "c2-k128-vorbis-q3-webm2" /* webm2: a sound block's time its first sample's */
++
++/* VP9 CQ for a normalized cinematic name, e.g. smk\\xzerg. */
++int kp_movie_quality(const char *name);
  
  /* A movie's VP9 packets: one a frame. */
  typedef struct {
 diff --git a/native/kp_convert/kp_repack.c b/native/kp_convert/kp_repack.c
-index 567eacc..37fae8d 100644
+index 567eacc..97c197b 100644
 --- a/native/kp_convert/kp_repack.c
 +++ b/native/kp_convert/kp_repack.c
+@@ -489,15 +489,15 @@ static void encode_movie(const KpRepackConfig *c, Job *j)
+ 	uint8_t sha[KP_SHA256_SIZE], *webm = NULL;
+ 	size_t size = 0, dot;
+ 	KpMovieInfo info;
++	snprintf(clip, sizeof clip, "%s", j->read->name); /* "smk\\blizzard.smk" as the clip's "smk\\blizzard" */
++	if ((dot = strlen(clip)) > 4 && strcmp(clip + dot - 4, ".smk") == 0) clip[dot - 4] = 0;
+ 	kp_sha256(j->data, j->size, sha);
+ 	if (c->cache) {
+ 		kp_sha256_hex(sha, hex);
+-		snprintf(path, sizeof path, "%s/%s-%s.webm", c->cache, hex, KP_MOVIE_SETTINGS);
++		snprintf(path, sizeof path, "%s/%s-vp9-q%d-%s.webm", c->cache, hex, kp_movie_quality(clip), KP_MOVIE_SETTINGS);
+ 		webm = kp_fs_read(path, &size, why, sizeof why);
+ 	}
+ 	if (!webm) {
+-		snprintf(clip, sizeof clip, "%s", j->read->name); /* "smk\\blizzard.smk" as the clip's "smk\\blizzard" */
+-		if ((dot = strlen(clip)) > 4 && strcmp(clip + dot - 4, ".smk") == 0) clip[dot - 4] = 0;
+ 		if (!(webm = kp_movie_smk_webm(j->data, j->size, clip, &size, &info, why, sizeof why))) {
+ 			snprintf(j->note, sizeof j->note, "%s", why);
+ 			j->failed = 1;
 @@ -1009,7 +1009,7 @@ int kp_repack_write(KpRes *res, const KpRepackConfig *c, KpRepackReport *rep, ch
  		return -1;
  	}
