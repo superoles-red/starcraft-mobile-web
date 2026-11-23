@@ -15,6 +15,7 @@ DEFAULT_PACK = Path.home() / "Documents" / "StarCraft Local Data" / "repack"
 ARCHIVE = re.compile(r"koprulu-[a-z0-9-]+\.mpq")
 PREFIX = "/generated/repack/"
 TYPES = {".html": "text/html; charset=utf-8", ".js": "text/javascript; charset=utf-8",
+         ".png": "image/png", ".webmanifest": "application/manifest+json",
          ".wasm": "application/wasm", ".txt": "text/plain; charset=utf-8"}
 CHUNK = 256 * 1024
 

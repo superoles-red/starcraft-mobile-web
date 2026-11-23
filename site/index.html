@@ -4,7 +4,12 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=contain">
   <meta name="theme-color" content="#000000">
-  <link rel="icon" href="data:,">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-title" content="StarCraft">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black">
+  <link rel="manifest" href="./manifest.webmanifest">
+  <link rel="apple-touch-icon" sizes="180x180" href="./ui/icon-180.png">
+  <link rel="icon" href="./ui/icon-192.png">
   <title>StarCraft · Brood War</title>
   <style>
     html, body { width: 100%; height: 100%; margin: 0; overflow: hidden; background: black; color-scheme: dark; }
@@ -15,6 +20,7 @@
   </style>
 </head>
 <body>
+  <div id="install-progress" role="status" aria-live="polite" hidden></div>
   <input id="library" type="file" multiple accept=".mpq" hidden
     title="Выберите папку repack, подготовленную из ваших дисков StarCraft и Brood War"
     aria-label="Выбрать локальные архивы StarCraft и Brood War">
