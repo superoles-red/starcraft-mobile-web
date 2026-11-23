@@ -1,0 +1,61 @@
+diff --git a/native/kp_app/kp_flow.c b/native/kp_app/kp_flow.c
+index 746bc0f..fb91da5 100644
+--- a/native/kp_app/kp_flow.c
++++ b/native/kp_app/kp_flow.c
+@@ -3844,6 +3844,21 @@ static void glue_frame(KpFlow *f)
+ 		kp_session_resume(f->session);
+ 		break;
+ 	}
++	case KP_GLUE_ROOM_SKIP_TUTORIAL: {
++		KpCampaignStep next;
++		if (f->has_run) {
++			kp_campaign_advance(&f->data->campaign, &f->run, kp_profile_progress(f->profile), 1, &next);
++			if (next.kind == KP_CAMPAIGN_STEP_MISSION) {
++				f->host.save_profile(f->host.ctx);
++				f->start_run = f->run;
++				f->has_start_run = 1;
++				start_glue_game(f, next.mission, (int)next.glue);
++				break;
++			}
++		}
++		leave_glue_game(f, after_game_menu(f));
++		break;
++	}
+ 	case KP_GLUE_ROOM_CANCEL:
+ 		if (f->net_game) f->net_left = 1; /* the room's cancel left Storm's game (SendBriefingStart 0x475cc0) */
+ 		/* RunTerranReadyRoom 0x461420 and its twins: the glue's exit (100, or the exit hook's -1) goes to the main
+diff --git a/native/kp_app/kp_hud.c b/native/kp_app/kp_hud.c
+index 8dcf971..52e9d73 100644
+--- a/native/kp_app/kp_hud.c
++++ b/native/kp_app/kp_hud.c
+@@ -24,6 +24,7 @@
+ #include "kp_utf8.h"
+ 
+ #define CONSOLE_A 255         /* the canvas's opacity of the console art and the panels */
++#define RESULT_SKIP_TUTORIAL 19 /* the ready room's Skip Tutorial control */
+ #define RESULT_START 101      /* the ready room's Start once the turn steps confirmed it (kp_ui_briefing.c) */
+ #define DEFAULT_NAME "Player"
+ 
+@@ -915,7 +916,8 @@ static KpGlueEvent poll(KpGlue *g)
+ 		} else if (g->room_opened) {
+ 			g->screen = KP_GLUE_NONE;
+ 			kp_ui_ready_room_end(ui);
+-			ev.kind = ui->result == RESULT_START ? KP_GLUE_ROOM_START : KP_GLUE_ROOM_CANCEL;
++			if (ui->result == RESULT_SKIP_TUTORIAL) ev.kind = KP_GLUE_ROOM_SKIP_TUTORIAL;
++			else ev.kind = ui->result == RESULT_START ? KP_GLUE_ROOM_START : KP_GLUE_ROOM_CANCEL;
+ 		}
+ 	} else if (g->screen == KP_GLUE_SCORE) {
+ 		if (ui->score.answered && !is_open(ui, ui->score.dialog)) {
+diff --git a/native/kp_app/kp_hud.h b/native/kp_app/kp_hud.h
+index 2ff517b..5dd1c9a 100644
+--- a/native/kp_app/kp_hud.h
++++ b/native/kp_app/kp_hud.h
+@@ -181,7 +181,7 @@ enum { KP_GLUE_NONE, KP_GLUE_MENUS, KP_GLUE_ROOM, KP_GLUE_SCORE, KP_GLUE_CREDITS
+ 
+ /* What a glue screen ended with. */
+ enum { KP_GLUE_GOES_ON, KP_GLUE_PROFILE, KP_GLUE_MISSION, KP_GLUE_EXIT, KP_GLUE_LOAD, KP_GLUE_ROOM_START,
+-	KP_GLUE_ROOM_CANCEL, KP_GLUE_SCORE_DONE, KP_GLUE_INTRO, KP_GLUE_LANGUAGE, KP_GLUE_REPLAY, KP_GLUE_CUSTOM,
++	KP_GLUE_ROOM_CANCEL, KP_GLUE_ROOM_SKIP_TUTORIAL, KP_GLUE_SCORE_DONE, KP_GLUE_INTRO, KP_GLUE_LANGUAGE, KP_GLUE_REPLAY, KP_GLUE_CUSTOM,
+ 	KP_GLUE_NETWORK, KP_GLUE_AWAKE };
+ typedef struct {
+ 	int kind;

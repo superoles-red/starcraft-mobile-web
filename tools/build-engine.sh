@@ -6,7 +6,7 @@ work=${2:-"${TMPDIR:-/tmp}/starcraft-web-build"}
 mkdir -p "$work" "$out"
 out=$(cd "$out" && pwd)
 work=$(cd "$work" && pwd)
-patch_file="$(cd "$(dirname "$0")" && pwd)/original-touch-console.patch"
+patch_dir="$(cd "$(dirname "$0")" && pwd)"
 src="$work/KopruluSector"
 pin=5ff8905b1d0bc6ab52d6563b8ef7b0a75ec40133
 if [ ! -d "$src/.git" ]; then
@@ -19,9 +19,16 @@ if [ "$(git -C "$src" rev-parse HEAD)" != "$pin" ]; then
   echo "Unexpected revision in $src" >&2
   exit 1
 fi
-if git -C "$src" diff --quiet HEAD; then
-  git -C "$src" apply "$patch_file"
-elif ! git -C "$src" diff --binary HEAD | cmp -s - "$patch_file"; then
+for patch in skip-tutorial.patch original-touch-console.patch; do
+  if git -C "$src" apply --check "$patch_dir/$patch" 2>/dev/null; then
+    git -C "$src" apply "$patch_dir/$patch"
+  elif ! git -C "$src" apply --reverse --check "$patch_dir/$patch" 2>/dev/null; then
+    echo "Cannot apply $patch to $src" >&2
+    exit 1
+  fi
+done
+# git orders these source files by path, with the SDL touch patch last.
+if ! git -C "$src" diff --binary HEAD | cmp -s - <(cat "$patch_dir/skip-tutorial.patch" "$patch_dir/original-touch-console.patch"); then
   echo "Unexpected changes in $src" >&2
   exit 1
 fi

@@ -53,7 +53,7 @@ function showFailure(error) {
 }
 
 async function launch(core, entries) {
-  if (!WebAssembly.validate(new Uint8Array([0, 97, 115, 109, 1, 0, 0, 0]))) {
+  if (typeof WebAssembly === 'undefined' || !WebAssembly.validate(new Uint8Array([0, 97, 115, 109, 1, 0, 0, 0]))) {
     throw new Error('Для игры нужен браузер с WebAssembly.');
   }
   const probe = document.createElement('canvas').getContext('webgl2');
@@ -122,7 +122,9 @@ picker.onchange = async () => {
     showFailure(error);
   }
 };
-if ('webkitdirectory' in picker) picker.webkitdirectory = true;
+if ('webkitdirectory' in picker && !new URLSearchParams(location.search).has('files')) {
+  picker.webkitdirectory = true;
+}
 
 canvas.addEventListener('contextmenu', e => e.preventDefault());
 window.addEventListener('keydown', e => {
