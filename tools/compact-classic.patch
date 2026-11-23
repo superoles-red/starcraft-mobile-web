@@ -1,0 +1,90 @@
+diff --git a/native/kp_convert/kp_convert.c b/native/kp_convert/kp_convert.c
+index f86ef6b..670fa28 100644
+--- a/native/kp_convert/kp_convert.c
++++ b/native/kp_convert/kp_convert.c
+@@ -22,7 +22,7 @@
+  *   icon DIR [--out generated]
+  *       the game's icon for the product's bundles (kp_icon.h), from a 1.17 install's StarCraft.exe (the profile's, by
+  *       its SHA-256): <out>/icon/ with icon-<size>.png, icon.ico, icon.icns and the ios/, web/ and android/res/ files
+- *   repack DIR [--out DIR] [--single] [--wav] [--res-log FILE] [--cache DIR] [--threads N] [--locales LIST] [--hd LIST]
++ *   repack DIR [--out DIR] [--single] [--wav] [--gameplay-only] [--res-log FILE] [--cache DIR] [--threads N] [--locales LIST] [--hd LIST]
+  *       the koprulu*.mpq repack of an install (kp_repack.h): its groups into generated/repack, or with --single one
+  *       koprulu.mpq (the movies' sets' and the languages' groups beside it) into generated/repack-single; a WAV as Ogg
+  *       Vorbis when that is smaller (--wav keeps the WAVs), a 1.17 movie as WebM (each encoded once into --cache,
+@@ -501,6 +501,7 @@ static int cmd_repack(int argc, char **argv)
+ 		if (strcmp(argv[i], "--out") == 0 && i + 1 < argc) c.out = argv[++i];
+ 		else if (strcmp(argv[i], "--single") == 0) c.single = 1;
+ 		else if (strcmp(argv[i], "--wav") == 0) c.wav = 1;
++		else if (strcmp(argv[i], "--gameplay-only") == 0) c.gameplay_only = 1;
+ 		else if (strcmp(argv[i], "--res-log") == 0 && i + 1 < argc) res_log = argv[++i];
+ 		else if (strcmp(argv[i], "--cache") == 0 && i + 1 < argc) c.cache = argv[++i];
+ 		else if (strcmp(argv[i], "--threads") == 0 && i + 1 < argc) c.threads = atoi(argv[++i]);
+@@ -1169,7 +1170,7 @@ static const struct {
+ 	{ "digests", "digests DIR --out PATH", cmd_digests },
+ 	{ "extract", "extract DIR NAME OUT", cmd_extract },
+ 	{ "icon", "icon DIR [--out DIR]", cmd_icon },
+-	{ "repack", "repack DIR [--out DIR] [--single] [--wav] [--res-log FILE] [--cache DIR] [--threads N] [--locales LIST] [--hd LIST]",
++	{ "repack", "repack DIR [--out DIR] [--single] [--wav] [--gameplay-only] [--res-log FILE] [--cache DIR] [--threads N] [--locales LIST] [--hd LIST]",
+ 		cmd_repack },
+ 	{ "locale-check", "locale-check DIR [--locale L|all] [--out DIR]", cmd_locale_check },
+ 	{ "scenarios", "scenarios DIR [--specs DIR] [--out DIR]", cmd_scenarios },
+diff --git a/native/kp_convert/kp_movie.h b/native/kp_convert/kp_movie.h
+index 7c77b28..d082318 100644
+--- a/native/kp_convert/kp_movie.h
++++ b/native/kp_convert/kp_movie.h
+@@ -19,11 +19,11 @@
+ extern "C" {
+ #endif
+ 
+-#define KP_MOVIE_CQ 32           /* FFmpeg's -crf 32 -b:v 0 */
++#define KP_MOVIE_CQ 37           /* compact mobile SD pack, same frame size, rate and chroma */
+ #define KP_MOVIE_CPU_USED 2
+ #define KP_MOVIE_KEY_INTERVAL 128 /* libvpx's own longest distance between key frames, named so that it stays */
+ /* What a movie's WebM is kept in the cache by, past its SMK's SHA-256: the settings and the writer's version */
+-#define KP_MOVIE_SETTINGS "vp9-q32-c2-k128-vorbis-q3-webm2" /* webm2: a sound block's time its first sample's */
++#define KP_MOVIE_SETTINGS "vp9-q37-c2-k128-vorbis-q3-webm2" /* webm2: a sound block's time its first sample's */
+ 
+ /* A movie's VP9 packets: one a frame. */
+ typedef struct {
+diff --git a/native/kp_convert/kp_repack.c b/native/kp_convert/kp_repack.c
+index 567eacc..37fae8d 100644
+--- a/native/kp_convert/kp_repack.c
++++ b/native/kp_convert/kp_repack.c
+@@ -1009,7 +1009,7 @@ int kp_repack_write(KpRes *res, const KpRepackConfig *c, KpRepackReport *rep, ch
+ 		return -1;
+ 	}
+ 	if ((c->hd_set_count > 0 || kind == KP_RES_SOURCE_CASC) && hd_init(&hd, res, c, err, err_size) != 0) goto done;
+-	if (!(reads = plan(res, c, &hd.d, &catalog, kind == KP_RES_SOURCE_MPQ ? &catalog : NULL, &count, err, err_size))) goto done;
++	if (!(reads = plan(res, c, &hd.d, &catalog, kind == KP_RES_SOURCE_MPQ && !c->gameplay_only ? &catalog : NULL, &count, err, err_size))) goto done;
+ 	if (!(groups = (Group *)calloc(KP_REPACK_GROUPS, sizeof *groups)) || !(jobs = (Job *)calloc(WINDOW, sizeof *jobs))) {
+ 		snprintf(err, err_size, "out of memory");
+ 		goto done;
+@@ -1083,6 +1083,16 @@ int kp_repack_write(KpRes *res, const KpRepackConfig *c, KpRepackReport *rep, ch
+ 				else report_name(rep->missing_names, &rep->missing, j->read->name);
+ 				continue;
+ 			}
++			/* Classic CDs can store the same-length PCM with different MPQ audio
++			 * compression. Mark its actual digest so the runtime accepts the listing. */
++			if (j->status == KP_RES_EXACT && ends_with(j->read->key, ".wav")) {
++				const KpDefsInput *reference = kp_defs_input(p, j->read->key);
++				uint8_t digest[KP_SHA256_SIZE];
++				char hex[KP_SHA256_SIZE * 2 + 1];
++				kp_sha256(j->data, j->size, digest);
++				kp_sha256_hex(digest, hex);
++				if (reference && strcmp(reference->sha256, hex) != 0) j->status = KP_RES_DIFFERS;
++			}
+ 			if (j->read->movie >= 0) {
+ 				uint8_t sha[KP_SHA256_SIZE];
+ 				kp_sha256(j->data, j->size, sha);
+diff --git a/native/kp_convert/kp_repack.h b/native/kp_convert/kp_repack.h
+index 454db31..e38e3f3 100644
+--- a/native/kp_convert/kp_repack.h
++++ b/native/kp_convert/kp_repack.h
+@@ -85,6 +85,7 @@ extern "C" {
+ 
+ typedef struct {
+ 	const char *out;        /* the folder; the koprulu*.mpq there before are removed */
++	int gameplay_only;      /* skip the optional classic cinematics when building a test pack */
+ 	int single;             /* one koprulu.mpq and the cinematics' group, instead of the groups */
+ 	int wav;                /* the sounds as they are (no Ogg Vorbis; a 1.17 movie is WebM all the same) */
+ 	const char *cache;      /* the folder the encoded files are kept in (a WAV's Ogg Vorbis, a 1.17 movie's WebM), NULL none */

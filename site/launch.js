@@ -10,7 +10,8 @@ let engineLoaded = false;
 // Only the requesting tab supplies files to its service worker. No upload or persistent copy.
 navigator.serviceWorker?.addEventListener('message', event => {
   if (event.data?.type === 'read-archive') {
-    event.ports[0]?.postMessage(files.get(event.data.name) ?? null);
+    // A missing file in an explicitly selected folder must never fall back to a different library.
+    event.ports[0]?.postMessage(files.size ? (files.get(event.data.name) ?? false) : null);
   }
 });
 

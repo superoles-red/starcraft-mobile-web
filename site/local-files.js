@@ -20,7 +20,9 @@ async function serve(event, name) {
   const client = await self.clients.get(event.clientId);
   const file = client && await getFile(client, name);
   if (!file) {
-    if (['127.0.0.1', 'localhost', '[::1]'].includes(location.hostname)) return fetch(event.request);
+    if (file !== false && ['127.0.0.1', 'localhost', '[::1]'].includes(location.hostname)) {
+      return fetch(event.request);
+    }
     return new Response('Local archive unavailable', { status: 404 });
   }
   const headers = { 'Accept-Ranges': 'bytes', 'Content-Type': 'application/octet-stream', 'Cache-Control': 'no-store' };
