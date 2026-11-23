@@ -20,11 +20,11 @@ jobs:
       pages: read
     steps:
       - uses: actions/checkout@v6
-      - run: python3 tools/check_public.py
+      - run: python3 tools/check_public.py --export "$RUNNER_TEMP/starcraft-pages"
       - uses: actions/configure-pages@v5
       - uses: actions/upload-pages-artifact@v4
         with:
-          path: site
+          path: ${{ runner.temp }}/starcraft-pages
   deploy:
     needs: package
     runs-on: ubuntu-latest

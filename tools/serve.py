@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 """Serve the public shell and a private campaign library to this computer."""
 import argparse
+import gzip
 import json
 import re
 import threading
@@ -51,7 +52,14 @@ class Handler(BaseHTTPRequestHandler):
             if send_body:
                 self.wfile.write(data)
             return
-        if path.startswith(PREFIX) and ARCHIVE.fullmatch(path[len(PREFIX):]):
+        engine = path == "/engine/koprulu.wasm"
+        encoded = False
+        if engine:
+            f = SITE / "engine/koprulu.wasm.gz"
+            # Serve the stored representation directly to browsers, or the identical raw module to other clients.
+            encodings = [item.strip() for item in self.headers.get("Accept-Encoding", "").lower().split(",")]
+            encoded = "gzip" in encodings
+        elif path.startswith(PREFIX) and ARCHIVE.fullmatch(path[len(PREFIX):]):
             f = self.server.pack / path[len(PREFIX):]
         else:
             f = SITE / ("index.html" if path == "/" else path.lstrip("/"))
@@ -60,6 +68,10 @@ class Handler(BaseHTTPRequestHandler):
         if not f.is_file() or f.is_symlink():
             return self.send_error(404)
         size = f.stat().st_size
+        if engine and not encoded:
+            with f.open("rb") as stored:
+                stored.seek(-4, 2)
+                size = int.from_bytes(stored.read(4), "little")  # gzip ISIZE, 32-bit module
         start, end = 0, size - 1
         header = self.headers.get("Range")
         if header:
@@ -71,7 +83,11 @@ class Handler(BaseHTTPRequestHandler):
                 self.end_headers()
                 return
         self.send_response(206 if header else 200)
-        self.send_header("Content-Type", TYPES.get(f.suffix, "application/octet-stream"))
+        self.send_header("Content-Type", "application/wasm" if engine else TYPES.get(f.suffix, "application/octet-stream"))
+        if engine:
+            self.send_header("Vary", "Accept-Encoding")
+            if encoded:
+                self.send_header("Content-Encoding", "gzip")
         self.send_header("Cache-Control", "no-cache")
         self.send_header("Accept-Ranges", "bytes")
         self.send_header("Content-Length", str(end - start + 1))
@@ -79,7 +95,7 @@ class Handler(BaseHTTPRequestHandler):
             self.send_header("Content-Range", f"bytes {start}-{end}/{size}")
         self.end_headers()
         if send_body:
-            with f.open("rb") as stream:
+            with (gzip.open(f, "rb") if engine and not encoded else f.open("rb")) as stream:
                 stream.seek(start)
                 left = end - start + 1
                 try:

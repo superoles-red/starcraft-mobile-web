@@ -35,4 +35,6 @@ fi
 (cd "$src" && bash tools/toolchain/fetch.sh)
 emcmake cmake -S "$src" -B "$work/build-web" -G Ninja -DCMAKE_BUILD_TYPE=Release -DKP_APP=ON -DKP_CXX_CHECK=OFF '-DKP_WEB_LINK='
 cmake --build "$work/build-web" --target koprulu --parallel "${JOBS:-4}"
-cp "$work/build-web/koprulu.js" "$work/build-web/koprulu.wasm" "$out/"
+cp "$work/build-web/koprulu.js" "$out/"
+gzip -n -9 -c "$work/build-web/koprulu.wasm" > "$out/koprulu.wasm.gz.tmp"
+mv "$out/koprulu.wasm.gz.tmp" "$out/koprulu.wasm.gz"
